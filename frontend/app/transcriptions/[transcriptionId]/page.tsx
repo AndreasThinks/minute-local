@@ -4,6 +4,7 @@ import { MinuteTab } from '@/app/transcriptions/[transcriptionId]/MinuteTab/Minu
 import { TranscriptionTab } from '@/app/transcriptions/[transcriptionId]/TranscriptionTab/TranscriptionTab'
 import { DownloadButton } from '@/components/download-button'
 import { AudioWav } from '@/components/icons/AudioWav'
+import { ProcessingStage } from '@/components/status-icon'
 import { TranscriptionTitleEditor } from '@/components/transcription-title-editor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -14,6 +15,16 @@ import { FeatureFlags } from '@/lib/feature-flags'
 import { useQuery } from '@tanstack/react-query'
 import { Clock, Frown, LoaderCircle, SearchX } from 'lucide-react'
 import { useFeatureFlagEnabled } from 'posthog-js/react'
+
+// Map processing stages to user-friendly messages for the detail page
+const PROCESSING_STAGE_MESSAGES: Record<ProcessingStage, string> = {
+  queued: 'Your transcription is queued for processing...',
+  transcribing: 'Transcribing your audio...',
+  diarizing: 'Identifying speakers in your meeting...',
+  generating_title: 'Generating a title for your meeting...',
+  generating_minutes: 'Generating meeting minutes...',
+  complete: 'Processing complete!',
+}
 
 export default function TranscriptionPage({
   params: { transcriptionId },
@@ -28,7 +39,7 @@ export default function TranscriptionPage({
     }),
     refetchInterval: (query) =>
       query.state.data?.status &&
-      ['awaiting_start', 'in_progress'].includes(query.state.data.status)
+        ['awaiting_start', 'in_progress'].includes(query.state.data.status)
         ? 2000
         : false,
   })
@@ -57,6 +68,14 @@ export default function TranscriptionPage({
     transcription.status &&
     ['awaiting_start', 'in_progress'].includes(transcription.status)
   ) {
+    // Get processing stage message, with type casting for the extended response type
+    const processingStage = (
+      transcription as typeof transcription & { processing_stage?: ProcessingStage }
+    ).processing_stage
+    const stageMessage = processingStage
+      ? PROCESSING_STAGE_MESSAGES[processingStage]
+      : 'Processing your transcription...'
+
     return (
       <div>
         <TranscriptionTitleEditor
@@ -70,8 +89,9 @@ export default function TranscriptionPage({
         </div>
         <div className="flex flex-col items-center justify-center">
           <AudioWav />
-          <p className="mb-4">
-            Transcription being processed, you can close the tab.
+          <p className="mb-2 text-lg font-medium">{stageMessage}</p>
+          <p className="mb-4 text-sm text-slate-500">
+            You can close this tab, we&apos;ll keep processing.
           </p>
           <AudioPlayer transcriptionId={transcription.id} />
         </div>

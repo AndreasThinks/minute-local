@@ -4,7 +4,13 @@ from enum import IntEnum, StrEnum, auto
 
 from pydantic import BaseModel, Field
 
-from common.database.postgres_models import ContentSource, DialogueEntry, HallucinationType, JobStatus, TemplateType
+from common.database.postgres_models import (
+    ContentSource,
+    DialogueEntry,
+    HallucinationType,
+    JobStatus,
+    TemplateType,
+)
 
 
 class TranscriptionMetadata(BaseModel):
@@ -15,6 +21,7 @@ class TranscriptionMetadata(BaseModel):
     title: str | None = None
     text: str
     status: JobStatus
+    processing_stage: str | None = None
 
 
 class PaginatedTranscriptionsResponse(BaseModel):
@@ -95,6 +102,7 @@ class TranscriptionGetResponse(BaseModel):
     title: str | None
     dialogue_entries: list[DialogueEntry] | None
     status: JobStatus
+    processing_stage: str | None = None
     created_datetime: datetime
 
 
@@ -114,7 +122,9 @@ class MinuteListItem(BaseModel):
 
 
 class MinutesCreateRequest(BaseModel):
-    template_name: str = Field(description="Name of the template to use for the minutes")
+    template_name: str = Field(
+        description="Name of the template to use for the minutes"
+    )
     template_id: uuid.UUID | None = Field(description="Optional id of user template")
     agenda: str | None = Field(description="The agenda for the meeting", default=None)
 
@@ -184,7 +194,9 @@ class TranscriptionJobMessageData(BaseModel):
         description="job name to identify asynchronous jobs. Not used in case of synchronous jobs",
         default="synchronous",
     )
-    transcript: list[DialogueEntry] | None = Field(description="Transcript of the transcription", default=None)
+    transcript: list[DialogueEntry] | None = Field(
+        description="Transcript of the transcription", default=None
+    )
 
 
 class WorkerMessage(BaseModel):
@@ -195,8 +207,12 @@ class WorkerMessage(BaseModel):
 
 class LLMHallucination(BaseModel):
     hallucination_type: HallucinationType = Field(description="Type of hallucination")
-    hallucination_text: str | None = Field(description="Text of hallucination", default=None)
-    hallucination_reason: str | None = Field(description="Reason for hallucination", default=None)
+    hallucination_text: str | None = Field(
+        description="Text of hallucination", default=None
+    )
+    hallucination_reason: str | None = Field(
+        description="Reason for hallucination", default=None
+    )
 
 
 MinuteAndHallucinations = tuple[str, list[LLMHallucination] | None]

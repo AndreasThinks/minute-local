@@ -39,6 +39,39 @@ run_watch:
 stop:
 	docker compose down
 
+# Local Development Commands (using docker-compose.local.yaml)
+.PHONY: local-start local-stop local-restart local-rebuild local-logs local-logs-backend local-logs-worker local-logs-frontend local-status local-clean
+
+local-start: ## Start all local services
+	docker compose -f docker-compose.local.yaml up -d --wait
+
+local-stop: ## Stop all local services
+	docker compose -f docker-compose.local.yaml down
+
+local-restart: ## Restart all local services
+	docker compose -f docker-compose.local.yaml restart
+
+local-rebuild: ## Force rebuild and start services
+	docker compose -f docker-compose.local.yaml up --build -d --wait
+
+local-logs: ## Follow logs for all services
+	docker compose -f docker-compose.local.yaml logs -f
+
+local-logs-backend: ## Follow backend logs only
+	docker compose -f docker-compose.local.yaml logs -f backend
+
+local-logs-worker: ## Follow worker logs only
+	docker compose -f docker-compose.local.yaml logs -f worker
+
+local-logs-frontend: ## Follow frontend logs only
+	docker compose -f docker-compose.local.yaml logs -f frontend
+
+local-status: ## Show status of all containers
+	docker compose -f docker-compose.local.yaml ps
+
+local-clean: ## Stop services and remove volumes (fresh start)
+	docker compose -f docker-compose.local.yaml down -v
+
 
 .PHONY: generate_aws_diagram
 generate_aws_diagram:

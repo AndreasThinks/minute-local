@@ -2,16 +2,50 @@ venv
 .DS_Store
 .idea
 .gcloudignore
-.git
 .venv
 __pycache__/
 /setup.cfg
 .ipynb_checkpoints
 # *.ipynb
 .env
+.env.local
 Brewfile.lock.json
 *.pdf
 .mypy_cache
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.eggs/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Audio files (test recordings)
+*.mp3
+*.wav
+*.m4a
+*.ogg
+*.flac
+*.webm
+
+# Whisper model cache
+whisper_models/
+.cache/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
 
 # Terraform
 **/.terraform/*

@@ -70,12 +70,29 @@ Minute can run **100% locally** without any external API calls using:
 # Copy the local environment template
 cp .env.local.example .env.local
 
-# Install local model dependencies (if running outside Docker)
-poetry install --with local
+# Start all services (recommended)
+make local-start
 
-# Run with Docker Compose (recommended)
-docker compose -f docker-compose.local.yaml up --build
+# Or with rebuild
+make local-rebuild
 ```
+
+#### Quick Commands (Make)
+
+These convenient make commands are available for local development:
+
+| Command | Description |
+|---------|-------------|
+| `make local-start` | Start all services |
+| `make local-stop` | Stop all services |
+| `make local-restart` | Restart all services |
+| `make local-rebuild` | Rebuild and start all services |
+| `make local-logs` | Follow logs for all services |
+| `make local-logs-backend` | Follow backend logs only |
+| `make local-logs-worker` | Follow worker logs only |
+| `make local-logs-frontend` | Follow frontend logs only |
+| `make local-status` | Show status of all containers |
+| `make local-clean` | Stop and remove all data (fresh start) |
 
 The application will be available at:
 - Frontend: http://localhost:3000

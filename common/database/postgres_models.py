@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 from typing import TypedDict
 from uuid import UUID, uuid4
 
-from sqlalchemy import TIMESTAMP, Column
+from sqlalchemy import TIMESTAMP, Column, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped
 from sqlalchemy.sql.functions import now
@@ -19,11 +19,15 @@ class DialogueEntry(TypedDict):
 
 # Create factory functions for columns to avoid reusing column objects
 def created_datetime_column():
-    return Column(TIMESTAMP(timezone=True), nullable=False, server_default=now(), default=None)
+    return Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=now(), default=None
+    )
 
 
 def updated_datetime_column():
-    return Column(TIMESTAMP(timezone=True), nullable=False, server_default=now(), default=None)
+    return Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=now(), default=None
+    )
 
 
 class BaseTableMixin(SQLModel):
@@ -33,7 +37,9 @@ class BaseTableMixin(SQLModel):
     }
 
     id: UUID = Field(
-        default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": func.gen_random_uuid()}
+        default_factory=uuid4,
+        primary_key=True,
+        sa_column_kwargs={"server_default": func.gen_random_uuid()},
     )
 
 
@@ -44,6 +50,17 @@ class JobStatus(StrEnum):
     FAILED = auto()
 
 
+class ProcessingStage(StrEnum):
+    """Processing stages for transcription jobs to show progress to users."""
+
+    QUEUED = auto()  # Job is queued
+    TRANSCRIBING = auto()  # Whisper is processing audio
+    DIARIZING = auto()  # Identifying speakers
+    GENERATING_TITLE = auto()  # Generating meeting title
+    GENERATING_MINUTES = auto()  # LLM is creating minutes
+    COMPLETE = auto()  # All done
+
+
 class ContentSource(StrEnum):
     MANUAL_EDIT = auto()
     AI_EDIT = auto()
@@ -52,18 +69,26 @@ class ContentSource(StrEnum):
 
 class MinuteVersion(BaseTableMixin, table=True):
     __tablename__ = "minute_version"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     minute_id: UUID = Field(foreign_key="minute.id", ondelete="CASCADE")
     minute: Mapped["Minute"] = Relationship(back_populates="minute_versions")
-    hallucinations: list["Hallucination"] = Relationship(back_populates="minute_version", cascade_delete=True)
+    hallucinations: list["Hallucination"] = Relationship(
+        back_populates="minute_version", cascade_delete=True
+    )
     html_content: str = Field(default="", sa_column_kwargs={"server_default": ""})
     status: JobStatus = Field(
-        default=JobStatus.AWAITING_START, sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name}
+        default=JobStatus.AWAITING_START,
+        sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name},
     )
     error: str | None = None
     ai_edit_instructions: str | None = Field(
-        default=None, description="If the content source is an AI edit, store the instruction here"
+        default=None,
+        description="If the content source is an AI edit, store the instruction here",
     )
 
     content_source: ContentSource = Field(
@@ -74,8 +99,12 @@ class MinuteVersion(BaseTableMixin, table=True):
 
 class Minute(BaseTableMixin, table=True):
     __tablename__ = "minute"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     transcription_id: UUID = Field(foreign_key="transcription.id", ondelete="CASCADE")
     transcription: Mapped["Transcription"] = Relationship(back_populates="minutes")
     template_name: str = Field(default="General")
@@ -101,20 +130,34 @@ class HallucinationType(StrEnum):
 
 class Hallucination(BaseTableMixin, table=True):
     __tablename__ = "hallucination"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     minute_version_id: UUID = Field(foreign_key="minute_version.id", ondelete="CASCADE")
     minute_version: MinuteVersion = Relationship(back_populates="hallucinations")
-    hallucination_type: HallucinationType = Field(description="Type of hallucination", default=HallucinationType.OTHER)
-    hallucination_text: str | None = Field(description="Text of hallucination", default=None)
-    hallucination_reason: str | None = Field(description="Reason for hallucination", default=None)
+    hallucination_type: HallucinationType = Field(
+        description="Type of hallucination", default=HallucinationType.OTHER
+    )
+    hallucination_text: str | None = Field(
+        description="Text of hallucination", default=None
+    )
+    hallucination_reason: str | None = Field(
+        description="Reason for hallucination", default=None
+    )
 
 
 # Main models with table=True for DB tables
 class User(BaseTableMixin, table=True):
     __tablename__ = "user"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     email: str = Field(index=True)
     data_retention_days: int | None = Field(default=30)
     transcriptions: list["Transcription"] = Relationship(back_populates="user")
@@ -122,35 +165,58 @@ class User(BaseTableMixin, table=True):
 
 class Recording(BaseTableMixin, table=True):
     __tablename__ = "recording"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
     user_id: UUID = Field(foreign_key="user.id", nullable=False)
     s3_file_key: str
-    transcription_id: UUID | None = Field(default=None, foreign_key="transcription.id", ondelete="SET NULL")
+    transcription_id: UUID | None = Field(
+        default=None, foreign_key="transcription.id", ondelete="SET NULL"
+    )
     transcription: "Transcription" = Relationship(back_populates="recordings")
 
 
 class Chat(BaseTableMixin, table=True):
     __tablename__ = "chat"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     transcription_id: UUID = Field(foreign_key="transcription.id", ondelete="CASCADE")
     transcription: Mapped["Transcription"] = Relationship(back_populates="chat")
     user_content: str = Field(default=None)
     assistant_content: str | None = Field(default=None)
     status: JobStatus = Field(
-        default=JobStatus.AWAITING_START, sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name}
+        default=JobStatus.AWAITING_START,
+        sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name},
     )
     error: str | None = Field(default=None)
 
 
 class Transcription(BaseTableMixin, table=True):
     __tablename__ = "transcription"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
     title: str | None = Field(default=None)
-    dialogue_entries: list[DialogueEntry] | None = Field(default=None, sa_column=Column(JSONB))
+    dialogue_entries: list[DialogueEntry] | None = Field(
+        default=None, sa_column=Column(JSONB)
+    )
     status: JobStatus = Field(
-        default=JobStatus.AWAITING_START, sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name}
+        default=JobStatus.AWAITING_START,
+        sa_column_kwargs={"server_default": JobStatus.AWAITING_START.name},
+    )
+    # Use explicit String column to avoid SQLAlchemy enum type inference
+    # This stores values as lowercase strings matching the StrEnum auto() values
+    processing_stage: str = Field(
+        default=ProcessingStage.QUEUED.value,
+        sa_column=Column(String, nullable=False, server_default="queued"),
+        description="Current processing stage to show progress to users",
     )
     error: str | None = Field(default=None)
     user: User | None = Relationship(back_populates="transcriptions")
@@ -162,7 +228,9 @@ class Transcription(BaseTableMixin, table=True):
     )
 
     # Kept old minute versions so we can migrate them
-    legacy_minute_versions: list[dict] | None = Field(sa_column=Column(name="minute_versions", type_=JSONB), default=[])
+    legacy_minute_versions: list[dict] | None = Field(
+        sa_column=Column(name="minute_versions", type_=JSONB), default=[]
+    )
 
     recordings: Mapped[list[Recording]] = Relationship(
         back_populates="transcription",
@@ -193,8 +261,12 @@ class TemplateQuestion(BaseTableMixin, table=True):
 
 class UserTemplate(BaseTableMixin, table=True):
     __tablename__ = "user_template"
-    created_datetime: datetime = Field(sa_column=created_datetime_column(), default=None)
-    updated_datetime: datetime = Field(sa_column=updated_datetime_column(), default=None)
+    created_datetime: datetime = Field(
+        sa_column=created_datetime_column(), default=None
+    )
+    updated_datetime: datetime = Field(
+        sa_column=updated_datetime_column(), default=None
+    )
 
     name: str
     content: str

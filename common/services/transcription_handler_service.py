@@ -6,12 +6,20 @@ from sqlmodel import col, select
 
 from common.audio.speakers import process_speakers_and_dialogue_entries
 from common.database.postgres_database import SessionLocal
-from common.database.postgres_models import Chat, JobStatus, Minute, Transcription
+from common.database.postgres_models import (
+    Chat,
+    JobStatus,
+    Minute,
+    ProcessingStage,
+    Transcription,
+)
 from common.generate_meeting_title import generate_meeting_title
 from common.llm.client import FastOrBestLLM, create_default_chatbot
 from common.prompts import get_chat_with_transcript_system_message
 from common.services.exceptions import InteractionFailedError, TranscriptionFailedError
-from common.services.transcription_services.transcription_manager import TranscriptionServiceManager
+from common.services.transcription_services.transcription_manager import (
+    TranscriptionServiceManager,
+)
 from common.settings import get_settings
 from common.templates.citations import combine_consecutive_citations
 from common.types import DialogueEntry, TranscriptionJobMessageData
@@ -61,7 +69,11 @@ class TranscriptionHandlerService:
                 result = session.exec(query)
                 chats = result.all()
 
-                chat_history = [get_chat_with_transcript_system_message(chat.transcription.dialogue_entries)]
+                chat_history = [
+                    get_chat_with_transcript_system_message(
+                        chat.transcription.dialogue_entries
+                    )
+                ]
                 for entry in chats:
                     chat_history.append(
                         {
@@ -103,7 +115,11 @@ class TranscriptionHandlerService:
             minute = session.get(
                 Minute,
                 minute_id,
-                options=[selectinload(Minute.transcription).selectinload(Transcription.recordings)],
+                options=[
+                    selectinload(Minute.transcription).selectinload(
+                        Transcription.recordings
+                    )
+                ],
             )
             if not minute:
                 msg = f"minute id {minute_id} not found"
@@ -124,6 +140,7 @@ class TranscriptionHandlerService:
         transcript: list[DialogueEntry] | None = None,
         title: str | None = None,
         error: str | None = None,
+        processing_stage: ProcessingStage | None = None,
     ) -> None:
         with SessionLocal() as session:
             transcription = session.get(Transcription, transcription_id)
@@ -138,12 +155,17 @@ class TranscriptionHandlerService:
                 transcription.error = error
             if title:
                 transcription.title = title
+            if processing_stage:
+                # Use .value to get the lowercase string value from the StrEnum
+                transcription.processing_stage = processing_stage.value
             session.add(transcription)
             session.commit()
 
     @classmethod
     async def process_transcription(
-        cls, minute_id: UUID, async_transcription_message_data: TranscriptionJobMessageData | None = None
+        cls,
+        minute_id: UUID,
+        async_transcription_message_data: TranscriptionJobMessageData | None = None,
     ) -> TranscriptionJobMessageData:
         """Process a transcription job and save results. Returns True if job is complete, False otherwise."""
         try:
@@ -158,33 +180,70 @@ class TranscriptionHandlerService:
                     async_transcription_message_data=async_transcription_message_data,
                 )
             else:
-                # it's a new transcription job
-                cls.update_transcription(transcription.id, JobStatus.IN_PROGRESS)
-                transcription_job = await transcription_manager.perform_transcription_steps(transcription=transcription)
+                # it's a new transcription job - set stage to TRANSCRIBING
+                cls.update_transcription(
+                    transcription.id,
+                    status=JobStatus.IN_PROGRESS,
+                    processing_stage=ProcessingStage.TRANSCRIBING,
+                )
+                transcription_job = (
+                    await transcription_manager.perform_transcription_steps(
+                        transcription=transcription
+                    )
+                )
 
             if transcription_job.transcript:
-                dialogue_entries = await cls.identify_speakers(transcription_job.transcript)
-                meeting_title = await generate_meeting_title(transcript=dialogue_entries)
+                # Update stage to DIARIZING (identifying speakers)
                 cls.update_transcription(
-                    transcription.id, status=JobStatus.COMPLETED, transcript=dialogue_entries, title=meeting_title
+                    transcription.id,
+                    processing_stage=ProcessingStage.DIARIZING,
+                )
+                dialogue_entries = await cls.identify_speakers(
+                    transcription_job.transcript
+                )
+
+                # Update stage to GENERATING_TITLE
+                cls.update_transcription(
+                    transcription.id,
+                    processing_stage=ProcessingStage.GENERATING_TITLE,
+                )
+                meeting_title = await generate_meeting_title(
+                    transcript=dialogue_entries
+                )
+
+                # Mark as COMPLETE
+                cls.update_transcription(
+                    transcription.id,
+                    status=JobStatus.COMPLETED,
+                    transcript=dialogue_entries,
+                    title=meeting_title,
+                    processing_stage=ProcessingStage.COMPLETE,
                 )
 
         except Exception as e:
             msg = f"Transcription failed: {e!s}"
             logger.exception(msg)
             try:
-                cls.update_transcription(transcription.id, status=JobStatus.FAILED, error=msg)
+                cls.update_transcription(
+                    transcription.id, status=JobStatus.FAILED, error=msg
+                )
             except Exception:
-                logger.exception("Error updating transcription status. Maybe it doesn't exist?")
+                logger.exception(
+                    "Error updating transcription status. Maybe it doesn't exist?"
+                )
 
             raise TranscriptionFailedError from e
         else:
             return transcription_job
 
     @classmethod
-    async def identify_speakers(cls, dialogue_entries: list[DialogueEntry]) -> list[DialogueEntry]:
+    async def identify_speakers(
+        cls, dialogue_entries: list[DialogueEntry]
+    ) -> list[DialogueEntry]:
         try:
-            dialogue_entries = await process_speakers_and_dialogue_entries(dialogue_entries)
+            dialogue_entries = await process_speakers_and_dialogue_entries(
+                dialogue_entries
+            )
 
         except Exception:
             # Do not break flow if this step fails

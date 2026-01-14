@@ -1,6 +1,6 @@
 'use client'
 
-import { StatusBadge } from '@/components/status-icon'
+import { ProcessingStage, StatusBadge } from '@/components/status-icon'
 import { TranscriptionMetadata } from '@/lib/client'
 import { Clock } from 'lucide-react'
 
@@ -27,7 +27,14 @@ export const TranscriptionCard = ({
             {date.toDateString()} at {date.toLocaleTimeString()}
           </span>
         </div>
-        <StatusBadge status={transcription.status} className="text-inherit" />
+        <StatusBadge
+          status={transcription.status}
+          processingStage={
+            (transcription as TranscriptionMetadata & { processing_stage?: ProcessingStage })
+              .processing_stage
+          }
+          className="text-inherit"
+        />
       </div>
     </div>
   )

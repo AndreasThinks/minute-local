@@ -51,9 +51,9 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/healthcheck"]
-      interval: 60s
-      retries: 3
-      start_period: 30s
+      interval: 10s
+      retries: 6
+      start_period: 45s
       timeout: 5s
     develop:
       watch:
@@ -147,7 +147,7 @@ services:
       - .env.local
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     environment:
       - BACKEND_HOST=http://backend:8080
       - NEXT_PUBLIC_SENTRY_DSN=

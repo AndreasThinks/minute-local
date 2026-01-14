@@ -38,13 +38,17 @@ storage_service = get_storage_service(settings.STORAGE_SERVICE_NAME)
 
 transcriptions_router = APIRouter(tags=["Transcriptions"])
 transcription_queue_service = get_queue_service(
-    settings.QUEUE_SERVICE_NAME, settings.TRANSCRIPTION_QUEUE_NAME, settings.TRANSCRIPTION_DEADLETTER_QUEUE_NAME
+    settings.QUEUE_SERVICE_NAME,
+    settings.TRANSCRIPTION_QUEUE_NAME,
+    settings.TRANSCRIPTION_DEADLETTER_QUEUE_NAME,
 )
 
 logger = logging.getLogger(__name__)
 
 
-@transcriptions_router.get("/transcriptions", response_model=PaginatedTranscriptionsResponse)
+@transcriptions_router.get(
+    "/transcriptions", response_model=PaginatedTranscriptionsResponse
+)
 async def list_transcriptions(
     session: SQLSessionDep,
     current_user: UserDep,
@@ -52,7 +56,9 @@ async def list_transcriptions(
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> PaginatedTranscriptionsResponse:
     """Get paginated metadata for transcriptions for the current user."""
-    count_statement = select(func.count(col(Transcription.id))).where(Transcription.user_id == current_user.id)
+    count_statement = select(func.count(col(Transcription.id))).where(
+        Transcription.user_id == current_user.id
+    )
     count_result = await session.exec(count_statement)
     total_count = count_result.one()
 
@@ -74,6 +80,7 @@ async def list_transcriptions(
             title=t.title,
             text=t.dialogue_entries[0]["text"][:100] if t.dialogue_entries else "",
             status=t.status,
+            processing_stage=t.processing_stage,
         )
         for t in transcriptions
     ]
@@ -99,12 +106,16 @@ async def create_recording(
     recording = Recording(user_id=user.id, s3_file_key=user_upload_s3_file_key)
     session.add(recording)
     await session.commit()
-    presigned_url = await storage_service.generate_presigned_url_put_object(user_upload_s3_file_key, 3600)
+    presigned_url = await storage_service.generate_presigned_url_put_object(
+        user_upload_s3_file_key, 3600
+    )
     await session.refresh(recording)
     return RecordingCreateResponse(id=recording.id, upload_url=presigned_url)
 
 
-@transcriptions_router.post("/transcriptions", response_model=TranscriptionCreateResponse, status_code=201)
+@transcriptions_router.post(
+    "/transcriptions", response_model=TranscriptionCreateResponse, status_code=201
+)
 async def create_transcription(
     request: TranscriptionCreateRequest,
     session: SQLSessionDep,
@@ -134,12 +145,16 @@ async def create_transcription(
     session.add(minute_version)
     recording.transcription_id = transcription.id
     await session.commit()
-    transcription_queue_service.publish_message(WorkerMessage(id=minute.id, type=TaskType.TRANSCRIPTION))
+    transcription_queue_service.publish_message(
+        WorkerMessage(id=minute.id, type=TaskType.TRANSCRIPTION)
+    )
 
     return TranscriptionCreateResponse(id=transcription.id)
 
 
-@transcriptions_router.get("/transcriptions/{transcription_id}", response_model=TranscriptionGetResponse)
+@transcriptions_router.get(
+    "/transcriptions/{transcription_id}", response_model=TranscriptionGetResponse
+)
 async def get_transcription(
     transcription_id: uuid.UUID,
     session: SQLSessionDep,
@@ -152,6 +167,7 @@ async def get_transcription(
     return TranscriptionGetResponse(
         id=transcription.id,
         status=transcription.status,
+        processing_stage=transcription.processing_stage,
         dialogue_entries=transcription.dialogue_entries,
         title=transcription.title,
         created_datetime=transcription.created_datetime,
@@ -174,22 +190,34 @@ async def get_recordings_for_transcription(
     recordings = result.all()
     # Only return oldest of each file type
     # So users only see original mp3 file if it was converted due to multiple channels
-    recordings = {Path(recording.s3_file_key).suffix: recording for recording in recordings}.values()
+    recordings = {
+        Path(recording.s3_file_key).suffix: recording for recording in recordings
+    }.values()
     signed_recordings: list[SingleRecording] = []
     for recording in recordings:
         if not await storage_service.check_object_exists(recording.s3_file_key):
             continue
         key_path = Path(recording.s3_file_key)
-        filename = f"{transcription.title}{key_path.suffix}" if transcription.title else key_path.name
+        filename = (
+            f"{transcription.title}{key_path.suffix}"
+            if transcription.title
+            else key_path.name
+        )
         presigned_url = await storage_service.generate_presigned_url_get_object(
             recording.s3_file_key, filename, 60 * 60 * 12
         )
-        signed_recordings.append(SingleRecording(id=recording.id, url=presigned_url, extension=key_path.suffix))
+        signed_recordings.append(
+            SingleRecording(
+                id=recording.id, url=presigned_url, extension=key_path.suffix
+            )
+        )
 
     return signed_recordings
 
 
-@transcriptions_router.patch("/transcriptions/{transcription_id}", response_model=Transcription)
+@transcriptions_router.patch(
+    "/transcriptions/{transcription_id}", response_model=Transcription
+)
 async def save_transcription(
     transcription_id: uuid.UUID,
     transcription_data: TranscriptionPatchRequest,
@@ -214,7 +242,9 @@ async def save_transcription(
 
 
 @transcriptions_router.delete("/transcriptions/{transcription_id}", status_code=204)
-async def delete_transcription(transcription_id: uuid.UUID, session: SQLSessionDep, current_user: UserDep):
+async def delete_transcription(
+    transcription_id: uuid.UUID, session: SQLSessionDep, current_user: UserDep
+):
     """Delete a specific transcription by ID."""
     # First check if the transcription exists and belongs to the user
     transcription = await session.get(Transcription, transcription_id)
