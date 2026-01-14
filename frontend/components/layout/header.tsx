@@ -1,6 +1,6 @@
 import { Alpha } from '@/components/layout/alpha'
 import { NavButton } from '@/components/layout/nav-button'
-import { FileText, Home, Settings } from 'lucide-react'
+import { Activity, FileText, Home, Settings } from 'lucide-react'
 import Link from 'next/link'
 
 export const Header = async () => {
@@ -79,6 +79,9 @@ export const Header = async () => {
           </NavButton>
           <NavButton href="/settings">
             <Settings size="1rem" /> Settings
+          </NavButton>
+          <NavButton href="/status">
+            <Activity size="1rem" /> Status
           </NavButton>
         </div>
       </div>

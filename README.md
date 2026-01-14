@@ -44,7 +44,60 @@ Minute can run **100% locally** without any external API calls using:
 - **Ollama** for local LLM inference
 - **faster-whisper** for local speech-to-text transcription
 
-#### Prerequisites
+#### 🚀 One-Command Setup
+
+The easiest way to get started is using our automated setup script:
+
+**Mac / Linux:**
+```bash
+./setup.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\setup.ps1
+```
+
+The setup script will:
+1. ✅ Check and install prerequisites (Docker, Ollama)
+2. ✅ Detect your GPU (NVIDIA CUDA, Apple Silicon, or CPU)
+3. ✅ Let you choose Small or Large model configuration
+4. ✅ Download required AI models
+5. ✅ Configure everything automatically
+6. ✅ Start the application and open your browser
+
+#### Setup Options
+
+**Mac / Linux:**
+
+| Command | Description |
+|---------|-------------|
+| `./setup.sh` | Interactive setup with prompts |
+| `./setup.sh --auto` | Fully automatic (auto-selects based on hardware) |
+| `./setup.sh --small` | Force small models (faster, less resources) |
+| `./setup.sh --large` | Force large models (best quality) |
+| `./setup.sh --no-start` | Setup only, don't start the application |
+
+**Windows (PowerShell):**
+
+| Command | Description |
+|---------|-------------|
+| `.\setup.ps1` | Interactive setup with prompts |
+| `.\setup.ps1 -Auto` | Fully automatic (auto-selects based on hardware) |
+| `.\setup.ps1 -Small` | Force small models (faster, less resources) |
+| `.\setup.ps1 -Large` | Force large models (best quality) |
+| `.\setup.ps1 -NoStart` | Setup only, don't start the application |
+
+#### Model Configurations
+
+| Config | LLM Model | Whisper | Requirements |
+|--------|-----------|---------|--------------|
+| **Small** | llama3.2 | medium | 8GB RAM, any CPU |
+| **Large** | qwen2.5:32b | large-v3 | 32GB RAM or 16GB+ VRAM |
+
+#### Manual Setup (Alternative)
+
+If you prefer manual setup:
 
 1. **Install Ollama**: Download from [ollama.com/download](https://ollama.com/download)
 
@@ -64,18 +117,14 @@ Minute can run **100% locally** without any external API calls using:
    - Ensure you have NVIDIA drivers and CUDA installed
    - The Docker setup will automatically use GPU if available
 
-#### Quick Start (Local Mode)
+4. **Start the application**:
+   ```bash
+   # Copy the local environment template
+   cp .env.local.example .env.local
 
-```bash
-# Copy the local environment template
-cp .env.local.example .env.local
-
-# Start all services (recommended)
-make local-start
-
-# Or with rebuild
-make local-rebuild
-```
+   # Start all services
+   make local-start
+   ```
 
 #### Quick Commands (Make)
 
@@ -98,6 +147,7 @@ The application will be available at:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8080
 - Ray Dashboard: http://localhost:8265
+- **Status Dashboard: http://localhost:3000/status** ← Monitor system health!
 
 #### Configuration Options
 
@@ -110,13 +160,24 @@ Key settings in `.env.local`:
 | `WHISPER_MODEL_SIZE` | Whisper model size (tiny/base/small/medium/large-v3) | `large-v3` |
 | `WHISPER_DEVICE` | Device for Whisper (`cuda` or `cpu`) | `cuda` |
 
+#### Status Dashboard
+
+Access the status dashboard at **http://localhost:3000/status** (or click "Status" in the navigation bar) to monitor:
+
+- **Service Health**: Backend, Database, and Ollama connectivity
+- **AI Models**: Which LLM models are loaded and available
+- **Configuration**: Current Whisper model, GPU settings, environment
+- **Quick Links**: Direct access to Ray Dashboard, API Docs, and Ollama
+
+The dashboard auto-refreshes every 10 seconds to keep you informed of system status.
+
 #### Notes on Local Mode
 
 - **First run** will download Whisper models (~3GB for large-v3), which are then cached
 - **GPU Memory**: `large-v3` Whisper needs ~4GB VRAM, LLMs need additional VRAM
-- **Speaker Diarization**: Not yet implemented locally (all speakers labeled as "Speaker 1")
-  - See `common/services/transcription_services/whisper_local.py` for TODO notes on adding this
+- **Speaker Diarization**: Enabled by default - identifies different speakers in the meeting
 - **Performance**: Local transcription may be slower than cloud APIs depending on your hardware
+- **Large model downloads**: The setup script will download ~2GB for small config or ~20GB+ for large config
 
 #### Set up your development environment:
 
