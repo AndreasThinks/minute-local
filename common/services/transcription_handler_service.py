@@ -16,7 +16,11 @@ from common.database.postgres_models import (
 from common.generate_meeting_title import generate_meeting_title
 from common.llm.client import FastOrBestLLM, create_default_chatbot
 from common.prompts import get_chat_with_transcript_system_message
-from common.services.exceptions import InteractionFailedError, TranscriptionFailedError
+from common.services.exceptions import (
+    InteractionFailedError,
+    TranscriptionCancelledError,
+    TranscriptionFailedError,
+)
 from common.services.transcription_services.transcription_manager import (
     TranscriptionServiceManager,
 )
@@ -30,6 +34,20 @@ logger = logging.getLogger(__name__)
 
 
 class TranscriptionHandlerService:
+    @classmethod
+    def check_transcription_exists(cls, transcription_id: UUID) -> bool:
+        """Check if a transcription still exists in the database (not deleted)."""
+        with SessionLocal() as session:
+            transcription = session.get(Transcription, transcription_id)
+            return transcription is not None
+
+    @classmethod
+    def check_minute_exists(cls, minute_id: UUID) -> bool:
+        """Check if a minute still exists in the database (not deleted)."""
+        with SessionLocal() as session:
+            minute = session.get(Minute, minute_id)
+            return minute is not None
+
     @classmethod
     def get_transcription(cls, transcription_id: UUID) -> Transcription:
         with SessionLocal() as session:
@@ -171,7 +189,23 @@ class TranscriptionHandlerService:
         try:
             transcription = cls.get_transcription_from_minute_id(minute_id)
         except Exception as e:
-            raise TranscriptionFailedError from e
+            # Minute/transcription was deleted before we started
+            logger.info(f"Minute {minute_id} not found - may have been deleted")
+            raise TranscriptionCancelledError(f"Minute {minute_id} was deleted") from e
+
+        # Set up cancellation checker for whisper_local adapter
+        def check_cancelled() -> bool:
+            return not cls.check_transcription_exists(transcription.id)
+
+        # Try to set cancellation checker on WhisperLocalAdapter if available
+        try:
+            from common.services.transcription_services.whisper_local import (
+                WhisperLocalAdapter,
+            )
+
+            WhisperLocalAdapter.set_cancellation_checker(check_cancelled)
+        except ImportError:
+            pass
 
         try:
             if async_transcription_message_data:
@@ -180,6 +214,12 @@ class TranscriptionHandlerService:
                     async_transcription_message_data=async_transcription_message_data,
                 )
             else:
+                # Check if still exists before starting
+                if not cls.check_transcription_exists(transcription.id):
+                    raise TranscriptionCancelledError(
+                        f"Transcription {transcription.id} was deleted before processing"
+                    )
+
                 # it's a new transcription job - set stage to TRANSCRIBING
                 cls.update_transcription(
                     transcription.id,
@@ -220,6 +260,10 @@ class TranscriptionHandlerService:
                     processing_stage=ProcessingStage.COMPLETE,
                 )
 
+        except TranscriptionCancelledError:
+            # Job was cancelled (deleted) - don't mark as failed, just log and re-raise
+            logger.info(f"Transcription {transcription.id} was cancelled - job deleted")
+            raise
         except Exception as e:
             msg = f"Transcription failed: {e!s}"
             logger.exception(msg)
@@ -233,8 +277,18 @@ class TranscriptionHandlerService:
                 )
 
             raise TranscriptionFailedError from e
-        else:
-            return transcription_job
+        finally:
+            # Clear the cancellation checker
+            try:
+                from common.services.transcription_services.whisper_local import (
+                    WhisperLocalAdapter,
+                )
+
+                WhisperLocalAdapter.set_cancellation_checker(None)
+            except ImportError:
+                pass
+
+        return transcription_job
 
     @classmethod
     async def identify_speakers(

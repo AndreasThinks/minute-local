@@ -1,3 +1,9 @@
+class TranscriptionCancelledError(Exception):
+    """Raised when a transcription has been deleted/cancelled and should stop processing."""
+
+    pass
+
+
 class TranscriptionFailedError(Exception):
     """Exception raised when a transcription fails."""
 

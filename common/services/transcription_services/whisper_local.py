@@ -1,7 +1,10 @@
 import logging
 from pathlib import Path
+from typing import Callable
+from uuid import UUID
 
 from common.database.postgres_models import Recording
+from common.services.exceptions import TranscriptionCancelledError
 from common.services.transcription_services.adapter import (
     AdapterType,
     TranscriptionAdapter,
@@ -42,9 +45,19 @@ class WhisperLocalAdapter(TranscriptionAdapter):
         """
         return data
 
+    # Class-level cancellation checker that can be set before transcription
+    _cancellation_checker: Callable[[], bool] | None = None
+
+    @classmethod
+    def set_cancellation_checker(cls, checker: Callable[[], bool] | None) -> None:
+        """Set a function that returns True if the job should be cancelled."""
+        cls._cancellation_checker = checker
+
     @classmethod
     async def start(
-        cls, audio_file_path_or_recording: Path | Recording
+        cls,
+        audio_file_path_or_recording: Path | Recording,
+        cancellation_checker: Callable[[], bool] | None = None,
     ) -> TranscriptionJobMessageData:
         """
         Transcribe audio file using local Whisper model.
@@ -110,9 +123,19 @@ class WhisperLocalAdapter(TranscriptionAdapter):
         )
 
         # Convert segments to DialogueEntry format
+        # Use the passed cancellation checker or fall back to class-level one
+        checker = cancellation_checker or cls._cancellation_checker
         dialogue_entries = []
+        segment_count = 0
 
         for segment in segments:
+            # Check for cancellation every 10 segments to avoid too many DB queries
+            segment_count += 1
+            if checker and segment_count % 10 == 0:
+                if checker():
+                    logger.info("Transcription cancelled - job was deleted")
+                    raise TranscriptionCancelledError("Transcription was cancelled")
+
             dialogue_entry: DialogueEntry = {
                 "speaker": "Speaker 1",  # Default, will be updated by diarization
                 "text": segment.text.strip(),
