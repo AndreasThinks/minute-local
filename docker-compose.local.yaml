@@ -105,6 +105,10 @@ services:
       - WHISPER_MODEL_SIZE=large-v3
       - WHISPER_DEVICE=cpu
       - WHISPER_COMPUTE_TYPE=int8
+      # Speaker diarization (fully local, no external accounts required)
+      - ENABLE_SPEAKER_DIARIZATION=true
+      - DIARIZATION_MIN_SPEAKERS=2
+      - DIARIZATION_MAX_SPEAKERS=10
     extra_hosts:
       - "host.docker.internal:host-gateway"
     stop_grace_period: 30s # Allow time for transcription to complete

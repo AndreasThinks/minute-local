@@ -20,38 +20,12 @@ class WhisperLocalAdapter(TranscriptionAdapter):
     This adapter provides fully local speech-to-text transcription with GPU acceleration
     support. It uses the faster-whisper library which is optimized for performance.
 
-    Current capabilities:
+    Capabilities:
     - Local transcription (no external API calls)
-    - GPU acceleration (CUDA)
+    - GPU acceleration (CUDA) or CPU fallback
     - Multiple language support
     - Configurable model sizes
-
-    TODO: Speaker Diarization
-    ========================
-    Future enhancement: Add speaker identification to label who is speaking.
-
-    Options to consider:
-    1. resemblyzer + spectral clustering (lightweight, fully local)
-       - ~50MB model size
-       - Good for basic speaker separation
-       - No external dependencies
-
-    2. NVIDIA NeMo (fully local, no HuggingFace account)
-       - Download directly from NVIDIA
-       - ~3GB model size
-       - Better quality than option 1
-
-    3. pyannote.audio (best quality, requires one-time HF setup)
-       - Best-in-class diarization
-       - Requires HuggingFace token (free) for initial model download
-       - After download, works 100% offline
-       - Models cached in ~/.cache/huggingface/
-
-    Implementation notes:
-    - Add speaker_id field to DialogueEntry when ready
-    - Process audio with diarization library to get speaker timestamps
-    - Merge speaker timestamps with transcription segments
-    - Return transcript with speaker labels (e.g., "SPEAKER_00", "SPEAKER_01")
+    - Optional speaker diarization using resemblyzer (fully local, no accounts required)
     """
 
     max_audio_length = 36000  # 10 hours - essentially unlimited for local processing
@@ -98,14 +72,12 @@ class WhisperLocalAdapter(TranscriptionAdapter):
         if isinstance(audio_file_path_or_recording, Path):
             audio_path = audio_file_path_or_recording
         else:
-            # If Recording object, we'd need to get the path - this depends on your implementation
-            # For now, assume it has a path attribute or similar
+            # If Recording object, get the path
             audio_path = Path(audio_file_path_or_recording.file_path)
 
         logger.info(f"Starting Whisper transcription for: {audio_path}")
 
         # Initialize Whisper model
-        # Model size can be: tiny, base, small, medium, large-v2, large-v3
         model_size = settings.WHISPER_MODEL_SIZE
         device = settings.WHISPER_DEVICE  # "cuda" or "cpu"
         compute_type = (
@@ -141,49 +113,101 @@ class WhisperLocalAdapter(TranscriptionAdapter):
         dialogue_entries = []
 
         for segment in segments:
-            # TODO: Add speaker identification when diarization is implemented
-            # For now, all segments have speaker="Speaker 1" (single speaker)
             dialogue_entry: DialogueEntry = {
-                "speaker": "Speaker 1",  # TODO: Replace with actual speaker from diarization
+                "speaker": "Speaker 1",  # Default, will be updated by diarization
                 "text": segment.text.strip(),
                 "start_time": segment.start,
                 "end_time": segment.end,
             }
             dialogue_entries.append(dialogue_entry)
 
-            logger.debug(
-                f"[{segment.start:.2f}s -> {segment.end:.2f}s] "
-                f"Speaker {dialogue_entry['speaker']}: {segment.text}"
-            )
+            logger.debug(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
 
         logger.info(f"Transcription complete: {len(dialogue_entries)} segments")
 
-        # TODO: Future diarization implementation
-        # =====================================
-        # When adding diarization, the flow would be:
-        # 1. Run diarization on audio_path to get speaker segments
-        #    Example: diarization = pipeline(audio_path)
-        # 2. For each transcription segment, find overlapping speaker segment
-        # 3. Assign speaker_id based on the overlap
-        # 4. Update dialogue_entry.speaker_id accordingly
-        #
-        # Example code structure:
-        # ```
-        # if settings.ENABLE_SPEAKER_DIARIZATION:
-        #     diarization_segments = await cls._perform_diarization(audio_path)
-        #     for dialogue_entry in dialogue_entries:
-        #         speaker_id = cls._find_speaker_for_segment(
-        #             dialogue_entry.start,
-        #             dialogue_entry.end,
-        #             diarization_segments
-        #         )
-        #         dialogue_entry.speaker_id = speaker_id
-        # ```
+        # Apply speaker diarization if enabled
+        if settings.ENABLE_SPEAKER_DIARIZATION:
+            dialogue_entries = await cls._apply_diarization(
+                audio_path, dialogue_entries
+            )
 
         return TranscriptionJobMessageData(
             transcription_service=cls.name,
             transcript=dialogue_entries,
         )
+
+    @classmethod
+    async def _apply_diarization(
+        cls, audio_path: Path, dialogue_entries: list[DialogueEntry]
+    ) -> list[DialogueEntry]:
+        """
+        Apply speaker diarization to identify different speakers.
+
+        Uses resemblyzer + spectral clustering for fully local diarization
+        without requiring any external accounts.
+
+        Args:
+            audio_path: Path to the audio file
+            dialogue_entries: List of transcribed segments
+
+        Returns:
+            Updated dialogue_entries with speaker labels
+        """
+        try:
+            from common.audio.diarization import (
+                perform_diarization,
+                assign_speakers_to_transcript,
+            )
+        except ImportError as e:
+            logger.warning(
+                f"Diarization dependencies not available: {e}. "
+                "Continuing without speaker identification."
+            )
+            return dialogue_entries
+
+        logger.info("Starting speaker diarization...")
+
+        try:
+            # Perform diarization
+            speaker_segments = perform_diarization(
+                audio_path,
+                num_speakers=settings.DIARIZATION_NUM_SPEAKERS,
+                min_speakers=settings.DIARIZATION_MIN_SPEAKERS,
+                max_speakers=settings.DIARIZATION_MAX_SPEAKERS,
+            )
+
+            # Assign speakers to transcript segments
+            updated_entries = assign_speakers_to_transcript(
+                dialogue_entries, speaker_segments
+            )
+
+            # Convert back to DialogueEntry format with proper speaker labels
+            result = []
+            for entry in updated_entries:
+                # Convert SPEAKER_00 format to more readable format
+                speaker_num = entry["speaker"].split("_")[-1]
+                result.append(
+                    DialogueEntry(
+                        speaker=f"Speaker {int(speaker_num) + 1}",
+                        text=entry["text"],
+                        start_time=entry["start_time"],
+                        end_time=entry["end_time"],
+                    )
+                )
+
+            # Count unique speakers
+            unique_speakers = set(e["speaker"] for e in result)
+            logger.info(
+                f"Diarization complete: {len(unique_speakers)} speakers identified"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                f"Diarization failed: {e}. Continuing without speaker identification."
+            )
+            return dialogue_entries
 
     @classmethod
     def is_available(cls) -> bool:
@@ -203,60 +227,19 @@ class WhisperLocalAdapter(TranscriptionAdapter):
             )
             return False
 
+    @classmethod
+    def is_diarization_available(cls) -> bool:
+        """
+        Check if speaker diarization is available.
 
-# TODO: Future diarization helper functions
-# ==========================================
-# Uncomment and implement when adding speaker diarization:
-#
-# async def _perform_diarization(audio_path: Path) -> list[dict]:
-#     """
-#     Perform speaker diarization on audio file.
-#
-#     Args:
-#         audio_path: Path to audio file
-#
-#     Returns:
-#         List of dicts with 'start', 'end', 'speaker' keys
-#     """
-#     # Option 1: Using pyannote.audio (best quality)
-#     # from pyannote.audio import Pipeline
-#     # pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1")
-#     # diarization = pipeline(str(audio_path))
-#     # return [{'start': turn.start, 'end': turn.end, 'speaker': speaker}
-#     #         for turn, _, speaker in diarization.itertracks(yield_label=True)]
-#
-#     # Option 2: Using resemblyzer (lightweight)
-#     # from resemblyzer import VoiceEncoder, preprocess_wav
-#     # from spectral_cluster import SpectralClusterer
-#     # ... implementation here ...
-#
-#     pass
-#
-# def _find_speaker_for_segment(
-#     start: float,
-#     end: float,
-#     diarization_segments: list[dict]
-# ) -> int:
-#     """
-#     Find which speaker is talking during a transcription segment.
-#
-#     Uses overlap-based matching to assign speaker IDs.
-#
-#     Args:
-#         start: Segment start time in seconds
-#         end: Segment end time in seconds
-#         diarization_segments: List of speaker segments from diarization
-#
-#     Returns:
-#         Speaker ID (integer)
-#     """
-#     max_overlap = 0
-#     assigned_speaker = 0
-#
-#     for seg in diarization_segments:
-#         overlap = min(end, seg['end']) - max(start, seg['start'])
-#         if overlap > max_overlap:
-#             max_overlap = overlap
-#             assigned_speaker = int(seg['speaker'].split('_')[-1])
-#
-#     return assigned_speaker
+        Returns:
+            True if resemblyzer and dependencies can be imported
+        """
+        try:
+            import resemblyzer  # noqa: F401
+            import librosa  # noqa: F401
+            from sklearn.cluster import SpectralClustering  # noqa: F401
+
+            return True
+        except ImportError:
+            return False

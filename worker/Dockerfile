@@ -9,7 +9,14 @@ ENV UV_SYSTEM_PYTHON=1
 ENV PYTHONPATH=/app
 
 # Install system dependencies and UV
-RUN apt-get update && apt-get install -y ffmpeg curl && rm -rf /var/lib/apt/lists/*
+# build-essential is needed for compiling webrtcvad (used by resemblyzer for diarization)
+# libsndfile1 is needed for soundfile/librosa
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    build-essential \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app

@@ -166,6 +166,24 @@ class Settings(BaseSettings):
         default="float16",
     )
 
+    # Speaker diarization settings (local, no external accounts required)
+    ENABLE_SPEAKER_DIARIZATION: bool = Field(
+        description="Enable speaker diarization to identify different speakers in the transcript",
+        default=False,
+    )
+    DIARIZATION_MIN_SPEAKERS: int = Field(
+        description="Minimum number of speakers for auto-detection",
+        default=2,
+    )
+    DIARIZATION_MAX_SPEAKERS: int = Field(
+        description="Maximum number of speakers for auto-detection",
+        default=10,
+    )
+    DIARIZATION_NUM_SPEAKERS: int | None = Field(
+        description="Exact number of speakers if known (skips auto-detection)",
+        default=None,
+    )
+
     STORAGE_SERVICE_NAME: str = Field(
         description="Storage service type to use for file uploads. Currently supported are: s3, azure-blob",
         default="s3",
