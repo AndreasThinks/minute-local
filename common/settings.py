@@ -17,7 +17,9 @@ DOT_ENV_PATH = ".env"
 
 dotenv_detected = dotenv.load_dotenv(dotenv_path=DOT_ENV_PATH)
 if dotenv_detected:
-    logger.info("A .env file was detected and loaded. Values from it will override environment variables")
+    logger.info(
+        "A .env file was detected and loaded. Values from it will override environment variables"
+    )
 else:
     logger.info("No .env file was detected. Using environment variables as is")
 
@@ -43,20 +45,32 @@ class Settings(BaseSettings):
     )
 
     ENVIRONMENT: str = "local"
-    SENTRY_DSN: str | None = Field(description="Sentry DSN if using Sentry for telemetry", default=None)
+    SENTRY_DSN: str | None = Field(
+        description="Sentry DSN if using Sentry for telemetry", default=None
+    )
 
     # Structured logger setup
     EXECUTION_ENVIRONMENT: ExecutionEnvironmentType = (
-        ExecutionEnvironmentType.LOCAL if ENVIRONMENT.lower() == "local" else ExecutionEnvironmentType.FARGATE
+        ExecutionEnvironmentType.LOCAL
+        if ENVIRONMENT.lower() == "local"
+        else ExecutionEnvironmentType.FARGATE
     )
-    LOGGING_FORMAT: LogOutputFormat = LogOutputFormat.TEXT if ENVIRONMENT.lower() == "local" else LogOutputFormat.JSON
-    LOG_LEVEL: str = Field(description="The level at which to emit structured logs", default="info")
+    LOGGING_FORMAT: LogOutputFormat = (
+        LogOutputFormat.TEXT if ENVIRONMENT.lower() == "local" else LogOutputFormat.JSON
+    )
+    LOG_LEVEL: str = Field(
+        description="The level at which to emit structured logs", default="info"
+    )
 
-    TRANSCRIPTION_QUEUE_NAME: str = Field(description="queue name to use for SQS/Azure Service Bus queues")
+    TRANSCRIPTION_QUEUE_NAME: str = Field(
+        description="queue name to use for SQS/Azure Service Bus queues"
+    )
     TRANSCRIPTION_DEADLETTER_QUEUE_NAME: str = Field(
         description="deadletter queue name to use for SQS. Ignored if using Azure Service Bus "
     )
-    LLM_QUEUE_NAME: str = Field(description="queue name to use for SQS/Azure Service Bus queues")
+    LLM_QUEUE_NAME: str = Field(
+        description="queue name to use for SQS/Azure Service Bus queues"
+    )
     LLM_DEADLETTER_QUEUE_NAME: str = Field(
         description="deadletter queue name to use for SQS. Ignored if using Azure Service Bus "
     )
@@ -64,26 +78,47 @@ class Settings(BaseSettings):
     AZURE_SPEECH_KEY: str = Field(description="Azure STT speech key for API")
     AZURE_SPEECH_REGION: str = Field(description="Region for Azure STT")
 
-    MAX_TRANSCRIPTION_PROCESSES: int = Field(description="the number of transcription workers per node", default=1)
-    MAX_LLM_PROCESSES: int = Field(description="the number of LLM workers per node", default=1)
+    MAX_TRANSCRIPTION_PROCESSES: int = Field(
+        description="the number of transcription workers per node", default=1
+    )
+    MAX_LLM_PROCESSES: int = Field(
+        description="the number of LLM workers per node", default=1
+    )
 
     # if using Azure OpenAI
-    AZURE_DEPLOYMENT: str | None = Field(description="Azure deployment for openAI", default=None)
-    AZURE_OPENAI_API_KEY: str | None = Field(description="Azure API key for openAI", default=None)
-    AZURE_OPENAI_ENDPOINT: str | None = Field(description="Azure OpenAI service endpoint URL", default=None)
-    AZURE_OPENAI_API_VERSION: str | None = Field(description="Azure OpenAI API version", default=None)
+    AZURE_DEPLOYMENT: str | None = Field(
+        description="Azure deployment for openAI", default=None
+    )
+    AZURE_OPENAI_API_KEY: str | None = Field(
+        description="Azure API key for openAI", default=None
+    )
+    AZURE_OPENAI_ENDPOINT: str | None = Field(
+        description="Azure OpenAI service endpoint URL", default=None
+    )
+    AZURE_OPENAI_API_VERSION: str | None = Field(
+        description="Azure OpenAI API version", default=None
+    )
 
     # if using Gemini
     GOOGLE_APPLICATION_CREDENTIALS: str | None = Field(
-        description="Path to Google Cloud service account credentials JSON file", default=None
+        description="Path to Google Cloud service account credentials JSON file",
+        default=None,
     )
-    GOOGLE_CLOUD_PROJECT: str | None = Field(description="Google Cloud project ID", default=None)
-    GOOGLE_CLOUD_LOCATION: str | None = Field(description="Google Cloud region/location", default=None)
+    GOOGLE_CLOUD_PROJECT: str | None = Field(
+        description="Google Cloud project ID", default=None
+    )
+    GOOGLE_CLOUD_LOCATION: str | None = Field(
+        description="Google Cloud region/location", default=None
+    )
 
     # if using LOCALSTACK for development (recommended)
-    USE_LOCALSTACK: bool = Field(description="Use LocalStack for local AWS services emulation in dev", default=True)
+    USE_LOCALSTACK: bool = Field(
+        description="Use LocalStack for local AWS services emulation in dev",
+        default=True,
+    )
     LOCALSTACK_URL: str = Field(
-        description="LocalStack service URL for local AWS services emulation", default="http://localhost:4566"
+        description="LocalStack service URL for local AWS services emulation",
+        default="http://localhost:4566",
     )
 
     TRANSCRIPTION_SERVICES: list[str] = Field(
@@ -111,14 +146,38 @@ class Settings(BaseSettings):
         default="gemini-2.5-flash",
     )
 
+    # if using Ollama (local LLM)
+    OLLAMA_BASE_URL: str = Field(
+        description="Base URL for the Ollama API. Use http://ollama:11434 in Docker, http://localhost:11434 otherwise",
+        default="http://localhost:11434",
+    )
+
+    # if using local Whisper transcription
+    WHISPER_MODEL_SIZE: str = Field(
+        description="Whisper model size: tiny, base, small, medium, large-v2, large-v3",
+        default="large-v3",
+    )
+    WHISPER_DEVICE: str = Field(
+        description="Device to run Whisper on: 'cuda' for GPU, 'cpu' for CPU",
+        default="cuda",
+    )
+    WHISPER_COMPUTE_TYPE: str = Field(
+        description="Compute type for Whisper: 'float16' for GPU, 'int8' for CPU, 'float32' for compatibility",
+        default="float16",
+    )
+
     STORAGE_SERVICE_NAME: str = Field(
         description="Storage service type to use for file uploads. Currently supported are: s3, azure-blob",
         default="s3",
     )
     # if using s3
-    DATA_S3_BUCKET: str | None = Field(description="S3 bucket name for data storage", default=None)
+    DATA_S3_BUCKET: str | None = Field(
+        description="S3 bucket name for data storage", default=None
+    )
     # if using Azure blob
-    AZURE_BLOB_CONNECTION_STRING: str | None = Field(description="Azure Blob Storage connection string", default=None)
+    AZURE_BLOB_CONNECTION_STRING: str | None = Field(
+        description="Azure Blob Storage connection string", default=None
+    )
     AZURE_UPLOADS_CONTAINER_NAME: str | None = Field(
         description="Azure container name for uploaded files", default=None
     )
@@ -134,10 +193,14 @@ class Settings(BaseSettings):
         default="sqs",
     )
     # if using azure-service-bus
-    AZURE_SB_CONNECTION_STRING: str | None = Field(description="Azure service bus connection string", default=None)
+    AZURE_SB_CONNECTION_STRING: str | None = Field(
+        description="Azure service bus connection string", default=None
+    )
 
     # if running the worker inside a docker container (use "0.0.0.0" )
-    RAY_DASHBOARD_HOST: str = Field(description="Ray dashboard host IP address", default="127.0.0.1")
+    RAY_DASHBOARD_HOST: str = Field(
+        description="Ray dashboard host IP address", default="127.0.0.1"
+    )
 
     BETA_TEMPLATE_NAMES: list[str] = Field(
         description="List of template names available in beta. These are currently made available via a Posthog feature"
@@ -146,8 +209,12 @@ class Settings(BaseSettings):
     )
 
     # if using posthog
-    POSTHOG_API_KEY: str | None = Field(description="PostHog API key for analytics", default=None)
-    POSTHOG_HOST: str = Field(description="PostHog service host URL", default="https://eu.i.posthog.com")
+    POSTHOG_API_KEY: str | None = Field(
+        description="PostHog API key for analytics", default=None
+    )
+    POSTHOG_HOST: str = Field(
+        description="PostHog service host URL", default="https://eu.i.posthog.com"
+    )
 
     HALLUCINATION_CHECK: bool = Field(
         description="Should the LLM check for hallucinations? Note that the results of"
@@ -156,7 +223,8 @@ class Settings(BaseSettings):
     )
 
     MIN_WORD_COUNT_FOR_SUMMARY: int = Field(
-        default=200, description="Transcript must have at least this many words to be passed to summary stage"
+        default=200,
+        description="Transcript must have at least this many words to be passed to summary stage",
     )
     MIN_WORD_COUNT_FOR_FULL_SUMMARY: int = Field(
         default=199,

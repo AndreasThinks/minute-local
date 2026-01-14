@@ -25,7 +25,7 @@ Minute streamlines the traditionally time-intensive process of creating meeting 
 
 ## Development
 
-#### Run the app locally
+#### Run the app locally (Cloud APIs)
 
 1. copy `.env.example` to a file called `.env`, and fill in the required values
 2. Run `docker compose up --build`
@@ -37,6 +37,69 @@ This will build and run 5 containers:
 3. Worker service, which process transcriptions and does not have a public facing url
 4. Postgres database hosted at http:localhost:5432
 5. Localstack to simulate AWS SQS
+
+### Run Entirely Locally (No Cloud APIs Required)
+
+Minute can run **100% locally** without any external API calls using:
+- **Ollama** for local LLM inference
+- **faster-whisper** for local speech-to-text transcription
+
+#### Prerequisites
+
+1. **Install Ollama**: Download from [ollama.com/download](https://ollama.com/download)
+
+2. **Pull the required models**:
+   ```bash
+   # Start Ollama
+   ollama serve
+   
+   # Pull models (in another terminal)
+   ollama pull llama3.2           # Fast model for simple tasks
+   ollama pull qwen2.5:32b        # Best model for minute generation (needs ~20GB VRAM)
+   # OR for less VRAM:
+   ollama pull llama3.1:8b        # Lighter alternative (~8GB VRAM)
+   ```
+
+3. **NVIDIA GPU** (recommended): For optimal Whisper transcription performance
+   - Ensure you have NVIDIA drivers and CUDA installed
+   - The Docker setup will automatically use GPU if available
+
+#### Quick Start (Local Mode)
+
+```bash
+# Copy the local environment template
+cp .env.local.example .env.local
+
+# Install local model dependencies (if running outside Docker)
+poetry install --with local
+
+# Run with Docker Compose (recommended)
+docker compose -f docker-compose.local.yaml up --build
+```
+
+The application will be available at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8080
+- Ray Dashboard: http://localhost:8265
+
+#### Configuration Options
+
+Key settings in `.env.local`:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `FAST_LLM_MODEL_NAME` | Model for quick AI tasks | `llama3.2` |
+| `BEST_LLM_MODEL_NAME` | Model for minute generation | `qwen2.5:32b` |
+| `WHISPER_MODEL_SIZE` | Whisper model size (tiny/base/small/medium/large-v3) | `large-v3` |
+| `WHISPER_DEVICE` | Device for Whisper (`cuda` or `cpu`) | `cuda` |
+
+#### Notes on Local Mode
+
+- **First run** will download Whisper models (~3GB for large-v3), which are then cached
+- **GPU Memory**: `large-v3` Whisper needs ~4GB VRAM, LLMs need additional VRAM
+- **Speaker Diarization**: Not yet implemented locally (all speakers labeled as "Speaker 1")
+  - See `common/services/transcription_services/whisper_local.py` for TODO notes on adding this
+- **Performance**: Local transcription may be slower than cloud APIs depending on your hardware
 
 #### Set up your development environment:
 

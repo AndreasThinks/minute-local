@@ -1,3 +1,21 @@
+# Docker Compose for running Minute entirely locally with local models
+#
+# This configuration uses:
+# - Ollama for local LLM inference (GPU accelerated)
+# - Local Whisper (faster-whisper) for speech-to-text
+# - Local file storage instead of S3
+# - LocalStack for message queues (SQS emulation)
+#
+# Usage:
+#   docker compose -f docker-compose.local.yaml up --build
+#
+# Prerequisites:
+#   1. Install Ollama: https://ollama.com/download
+#   2. Pull required models:
+#      ollama pull llama3.2:latest
+#      ollama pull deepseek-r1:32b  (or your preferred large model)
+#   3. NVIDIA GPU with CUDA support (recommended)
+
 services:
   backend:
     build:
@@ -6,12 +24,20 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env
+      - .env.local
     environment:
       - POSTGRES_HOST=db
       - LOCALSTACK_URL=http://localstack:4566
       - STORAGE_SERVICE_NAME=local
       - LOCAL_STORAGE_PATH=/static
+      # Local LLM settings
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - FAST_LLM_PROVIDER=ollama
+      - FAST_LLM_MODEL_NAME=llama3.2:latest
+      - BEST_LLM_PROVIDER=ollama
+      - BEST_LLM_MODEL_NAME=deepseek-r1:32b
+      # Local transcription
+      - TRANSCRIPTION_SERVICES=["whisper_local"]
     depends_on:
       db:
         condition: service_healthy
@@ -21,6 +47,8 @@ services:
       - type: bind
         source: ./.data
         target: /static
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/healthcheck"]
       interval: 60s
@@ -42,13 +70,15 @@ services:
     build:
       context: .
       dockerfile: ./worker/Dockerfile
-    shm_size: 4gb
-    deploy: # Make sure the worker has a couple of CPUS
-      resources:
-        limits:
-          cpus: "2.0" # Set CPU limit to 2 cores
+      args:
+        # Install worker + local model dependencies for local mode
+        INSTALL_EXTRAS: "worker,local"
+    shm_size: 8gb # Increased for Whisper model
+    # TODO: For GPU support, configure NVIDIA as default Docker runtime:
+    # Edit /etc/docker/daemon.json to set "default-runtime": "nvidia"
+    # Then add: runtime: nvidia
     env_file:
-      - .env
+      - .env.local
     ports:
       - "8265:8265"
     volumes:
@@ -56,13 +86,28 @@ services:
       - type: bind
         source: ./.data
         target: /static
+      # Mount Whisper model cache to avoid re-downloading
+      - whisper_models:/root/.cache/huggingface
     environment:
       - POSTGRES_HOST=db
       - RAY_DASHBOARD_HOST=0.0.0.0
       - LOCALSTACK_URL=http://localstack:4566
       - STORAGE_SERVICE_NAME=local
       - LOCAL_STORAGE_PATH=/static
-    stop_grace_period: 10s
+      # Local LLM settings
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - FAST_LLM_PROVIDER=ollama
+      - FAST_LLM_MODEL_NAME=llama3.2:latest
+      - BEST_LLM_PROVIDER=ollama
+      - BEST_LLM_MODEL_NAME=deepseek-r1:32b
+      # Local Whisper settings (CPU mode - for GPU, see TODO above)
+      - TRANSCRIPTION_SERVICES=["whisper_local"]
+      - WHISPER_MODEL_SIZE=large-v3
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stop_grace_period: 30s # Allow time for transcription to complete
     depends_on:
       db:
         condition: service_healthy
@@ -72,8 +117,8 @@ services:
       test: ["CMD-SHELL", "python worker/healthcheck.py"]
       interval: 60s
       retries: 3
-      start_period: 60s
-      timeout: 5s
+      start_period: 120s # Increased for model loading
+      timeout: 10s
     develop:
       watch:
         - path: ./worker
@@ -90,19 +135,19 @@ services:
       context: .
       dockerfile: ./frontend/Dockerfile.dev
       args:
-        - NEXT_PUBLIC_SENTRY_DSN=$SENTRY_DSN
-        - NEXT_PUBLIC_POSTHOG_API_KEY=$POSTHOG_API_KEY
+        - NEXT_PUBLIC_SENTRY_DSN=
+        - NEXT_PUBLIC_POSTHOG_API_KEY=
     ports:
       - "3000:3000"
     env_file:
-      - .env
+      - .env.local
     depends_on:
       backend:
         condition: service_started
     environment:
       - BACKEND_HOST=http://backend:8080
-      - NEXT_PUBLIC_SENTRY_DSN=$SENTRY_DSN
-      - NEXT_PUBLIC_POSTHOG_API_KEY=$POSTHOG_API_KEY
+      - NEXT_PUBLIC_SENTRY_DSN=
+      - NEXT_PUBLIC_POSTHOG_API_KEY=
     volumes:
       - next_data:/app/.next
     develop:
@@ -120,7 +165,7 @@ services:
     image: postgres:13
     user: postgres
     env_file:
-      - .env
+      - .env.local
     volumes:
       - local_postgres_data:/var/lib/postgresql/data:Z
     ports:
@@ -132,16 +177,14 @@ services:
       retries: 24
       start_period: 30s
 
-  localstack: # LocalStack container
+  localstack:
     image: localstack/localstack:latest
     env_file:
-      - .env
+      - .env.local
     ports:
       - 4566:4566
       - 4510-4559:4510-4559
     volumes:
-      # Here you mount your setup file so it will be executed
-      # when the container starts
       - ./localstack-setup.sh:/etc/localstack/init/ready.d/script.sh
     environment:
       - AWS_DEFAULT_REGION=eu-west-2
@@ -155,3 +198,4 @@ services:
 volumes:
   local_postgres_data: {}
   next_data: {}
+  whisper_models: {} # Persist Whisper models to avoid re-downloading

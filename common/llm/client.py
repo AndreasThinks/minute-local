@@ -1,9 +1,6 @@
 from enum import Enum, auto
 from typing import TypeVar
 
-from google.genai.types import (
-    GenerateContentConfig,
-)
 from pydantic import BaseModel
 from tenacity import (
     retry,
@@ -11,7 +8,12 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from common.llm.adapters import GeminiModelAdapter, ModelAdapter, OpenAIModelAdapter
+from common.llm.adapters import (
+    ModelAdapter,
+    OllamaModelAdapter,
+    get_gemini_adapter,
+    get_openai_adapter,
+)
 from common.prompts import get_hallucination_detection_messages
 from common.settings import get_settings
 from common.types import LLMHallucination
@@ -42,7 +44,8 @@ class ChatBot:
     async def hallucination_check(self) -> list[LLMHallucination]:
         if settings.HALLUCINATION_CHECK:
             return await self.structured_chat(
-                messages=get_hallucination_detection_messages(), response_format=list[LLMHallucination]
+                messages=get_hallucination_detection_messages(),
+                response_format=list[LLMHallucination],
             )
         return []
 
@@ -54,10 +57,16 @@ class ChatBot:
         return response
 
     @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
-    async def structured_chat(self, messages: list[dict[str, str]], response_format: type[T]) -> T:
-        response = await self.adapter.structured_chat(messages=messages, response_format=response_format)
+    async def structured_chat(
+        self, messages: list[dict[str, str]], response_format: type[T]
+    ) -> T:
+        response = await self.adapter.structured_chat(
+            messages=messages, response_format=response_format
+        )
         self.messages.extend(messages)
-        self.messages.append({"role": "assistant", "content": response.model_dump_json()})
+        self.messages.append(
+            {"role": "assistant", "content": response.model_dump_json()}
+        )
         return response
 
 
@@ -66,13 +75,13 @@ def create_chatbot(model_type: str, model_name: str, temperature: float) -> Chat
     Creates and returns a chatbot instance based on the specified model type and name.
 
     This function initializes a ChatBot instance by selecting the appropriate model adapter
-    based on the provided model type. It supports "openai" and "gemini" model types. Additional
-    settings required for model initialization are sourced from application settings or passed
-    as keyword arguments. If an unsupported model type is specified, a ValueError is raised.
+    based on the provided model type. It supports "openai", "gemini", and "ollama" model types.
+    Additional settings required for model initialization are sourced from application settings
+    or passed as keyword arguments. If an unsupported model type is specified, a ValueError is raised.
 
     Args:
-        model_type: A string specifying the type of the model. Supported values are "openai"
-            and "gemini".
+        model_type: A string specifying the type of the model. Supported values are "openai",
+            "gemini", and "ollama".
         model_name: A string indicating the name of the model to be used.
         **kwargs: Additional keyword arguments to be passed to the model api call, if required.
 
@@ -83,6 +92,8 @@ def create_chatbot(model_type: str, model_name: str, temperature: float) -> Chat
         ValueError: If the specified model type is unsupported.
     """
     if model_type == "openai":
+        # Lazy import for OpenAI adapter (avoids import error when openai SDK not installed)
+        OpenAIModelAdapter = get_openai_adapter()
         return ChatBot(
             OpenAIModelAdapter(
                 model=model_name,
@@ -94,6 +105,10 @@ def create_chatbot(model_type: str, model_name: str, temperature: float) -> Chat
             )
         )
     elif model_type == "gemini":
+        # Lazy import for Gemini adapter (avoids import error when google-genai SDK not installed)
+        from google.genai.types import GenerateContentConfig
+
+        GeminiModelAdapter = get_gemini_adapter()
         return ChatBot(
             GeminiModelAdapter(
                 model=model_name,
@@ -101,6 +116,14 @@ def create_chatbot(model_type: str, model_name: str, temperature: float) -> Chat
                     safety_settings=GeminiModelAdapter.no_safety_settings(),
                     temperature=temperature,
                 ),
+            )
+        )
+    elif model_type == "ollama":
+        return ChatBot(
+            OllamaModelAdapter(
+                model=model_name,
+                base_url=settings.OLLAMA_BASE_URL,
+                temperature=temperature,
             )
         )
     else:
@@ -117,6 +140,10 @@ def create_default_chatbot(fast_or_best: FastOrBestLLM) -> ChatBot:
     """Helper function to create an OpenAI client. Let's replace when we have something like OmegaConf/Hydra.cc to
     instantiate chatbot"""
     if fast_or_best == FastOrBestLLM.BEST:
-        return create_chatbot(settings.BEST_LLM_PROVIDER, settings.BEST_LLM_MODEL_NAME, temperature=0.0)
+        return create_chatbot(
+            settings.BEST_LLM_PROVIDER, settings.BEST_LLM_MODEL_NAME, temperature=0.0
+        )
     else:
-        return create_chatbot(settings.FAST_LLM_PROVIDER, settings.FAST_LLM_MODEL_NAME, temperature=0.0)
+        return create_chatbot(
+            settings.FAST_LLM_PROVIDER, settings.FAST_LLM_MODEL_NAME, temperature=0.0
+        )
