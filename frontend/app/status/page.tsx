@@ -18,6 +18,8 @@ import {
     ChevronLeft,
     FileText,
     Filter,
+    Loader2,
+    Clock,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -66,8 +68,10 @@ interface SystemStatusResponse {
     configuration: ConfigurationInfo
 }
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080'
+
 const fetchStatus = async (): Promise<SystemStatusResponse> => {
-    const response = await fetch('/api/status')
+    const response = await fetch(`${BACKEND_URL}/status`)
     if (!response.ok) {
         throw new Error('Failed to fetch status')
     }
@@ -80,7 +84,7 @@ const fetchLogs = async (level?: string, limit: number = 50): Promise<LogsRespon
     if (level) {
         params.set('level', level)
     }
-    const response = await fetch(`/api/status/logs?${params.toString()}`)
+    const response = await fetch(`${BACKEND_URL}/status/logs?${params.toString()}`)
     if (!response.ok) {
         throw new Error('Failed to fetch logs')
     }
@@ -294,20 +298,47 @@ export default function StatusPage() {
                 {autoRefresh && ' (auto-refreshing every 10s)'}
             </p>
 
-            {/* Error State */}
-            {error && (
-                <Card className="mb-6 border-red-500">
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-red-500">
-                            <XCircle className="h-5 w-5" />
-                            <span>Failed to fetch status. Is the backend running?</span>
+            {/* System Starting Up State */}
+            {error && !status && (
+                <Card className="mb-6 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                    <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                            <div className="rounded-full bg-amber-100 dark:bg-amber-900/50 p-3">
+                                <Loader2 className="h-6 w-6 text-amber-600 animate-spin" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                                    <Clock className="h-5 w-5" />
+                                    System Starting Up...
+                                </h3>
+                                <p className="text-amber-700 dark:text-amber-300 mt-1">
+                                    The backend services are initializing. This typically takes 30-60 seconds.
+                                </p>
+                                <div className="mt-4 space-y-2 text-sm text-amber-600 dark:text-amber-400">
+                                    <div className="flex items-center gap-2">
+                                        <Database className="h-4 w-4" />
+                                        <span>Starting database...</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Server className="h-4 w-4" />
+                                        <span>Starting backend API...</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Bot className="h-4 w-4" />
+                                        <span>Loading AI models...</span>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-amber-500 mt-4">
+                                    This page will automatically refresh every 10 seconds.
+                                </p>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
             )}
 
             {/* Loading State */}
-            {isLoading && !status && (
+            {isLoading && !status && !error && (
                 <div className="flex items-center justify-center py-12">
                     <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>

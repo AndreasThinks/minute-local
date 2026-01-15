@@ -145,9 +145,8 @@ services:
       - "3000:3000"
     env_file:
       - .env.local
-    depends_on:
-      backend:
-        condition: service_healthy
+    # Note: No depends_on for backend - frontend starts immediately
+    # and shows "System Starting Up" status while backend initializes
     environment:
       - BACKEND_HOST=http://backend:8080
       - NEXT_PUBLIC_SENTRY_DSN=
