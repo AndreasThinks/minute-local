@@ -6,14 +6,17 @@ Provides information about:
 - Loaded models
 - Configuration
 - Queue status
+- Application logs
 """
 
 import os
+import re
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from common.settings import Settings
@@ -48,6 +51,20 @@ class QueueStatus(BaseModel):
     transcription_queue: str
     llm_queue: str
     pending_jobs: int
+
+
+class LogEntry(BaseModel):
+    timestamp: str
+    level: str
+    logger: str
+    message: str
+
+
+class LogsResponse(BaseModel):
+    logs: list[LogEntry]
+    total_lines: int
+    log_file: str
+    log_file_exists: bool
 
 
 class SystemStatusResponse(BaseModel):
@@ -231,3 +248,106 @@ async def get_system_status():
 async def status_health():
     """Simple health check for the status endpoint."""
     return {"status": "ok"}
+
+
+def parse_log_line(line: str) -> LogEntry | None:
+    """Parse a log line into a LogEntry object."""
+    # Pattern matches: 2024-01-15 10:30:45 - logger_name - LEVEL - message
+    pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - ([^-]+) - (\w+) - (.*)$"
+    match = re.match(pattern, line.strip())
+
+    if match:
+        return LogEntry(
+            timestamp=match.group(1),
+            logger=match.group(2).strip(),
+            level=match.group(3),
+            message=match.group(4),
+        )
+    return None
+
+
+def read_log_file(
+    log_file_path: str,
+    limit: int = 100,
+    level: str | None = None,
+    search: str | None = None,
+) -> tuple[list[LogEntry], int]:
+    """Read and parse log file, returning entries in reverse chronological order."""
+    log_path = Path(log_file_path)
+    entries: list[LogEntry] = []
+    total_lines = 0
+
+    if not log_path.exists():
+        return entries, 0
+
+    # Level priority for filtering
+    level_priority = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+    min_level = level_priority.get(level.upper(), 0) if level else 0
+
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            total_lines = len(lines)
+
+            # Process lines in reverse order (most recent first)
+            for line in reversed(lines):
+                if len(entries) >= limit:
+                    break
+
+                entry = parse_log_line(line)
+                if entry:
+                    # Filter by level
+                    entry_level = level_priority.get(entry.level.upper(), 0)
+                    if entry_level < min_level:
+                        continue
+
+                    # Filter by search term
+                    if search and search.lower() not in entry.message.lower():
+                        continue
+
+                    entries.append(entry)
+
+    except Exception:
+        pass
+
+    return entries, total_lines
+
+
+@status_router.get("/logs", response_model=LogsResponse)
+async def get_logs(
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of log entries to return",
+    ),
+    level: Optional[str] = Query(
+        default=None,
+        description="Minimum log level to return (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    ),
+    search: Optional[str] = Query(
+        default=None, description="Search term to filter log messages"
+    ),
+):
+    """
+    Get recent application logs.
+
+    Returns log entries from the log file in reverse chronological order (most recent first).
+    Supports filtering by log level and searching within log messages.
+    """
+    settings = Settings()
+    log_file_path = settings.LOG_FILE_PATH
+
+    log_path = Path(log_file_path)
+    log_file_exists = log_path.exists()
+
+    entries, total_lines = read_log_file(
+        log_file_path, limit=limit, level=level, search=search
+    )
+
+    return LogsResponse(
+        logs=entries,
+        total_lines=total_lines,
+        log_file=log_file_path,
+        log_file_exists=log_file_exists,
+    )

@@ -16,6 +16,8 @@ import {
     Cpu,
     HardDrive,
     ChevronLeft,
+    FileText,
+    Filter,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -43,6 +45,20 @@ interface ConfigurationInfo {
     transcription_services: string[]
 }
 
+interface LogEntry {
+    timestamp: string
+    level: string
+    logger: string
+    message: string
+}
+
+interface LogsResponse {
+    logs: LogEntry[]
+    total_lines: number
+    log_file: string
+    log_file_exists: boolean
+}
+
 interface SystemStatusResponse {
     timestamp: string
     services: ServiceStatus[]
@@ -54,6 +70,19 @@ const fetchStatus = async (): Promise<SystemStatusResponse> => {
     const response = await fetch('/api/status')
     if (!response.ok) {
         throw new Error('Failed to fetch status')
+    }
+    return response.json()
+}
+
+const fetchLogs = async (level?: string, limit: number = 50): Promise<LogsResponse> => {
+    const params = new URLSearchParams()
+    params.set('limit', limit.toString())
+    if (level) {
+        params.set('level', level)
+    }
+    const response = await fetch(`/api/status/logs?${params.toString()}`)
+    if (!response.ok) {
+        throw new Error('Failed to fetch logs')
     }
     return response.json()
 }
@@ -145,9 +174,53 @@ function ModelCard({ model }: { model: ModelStatus }) {
     )
 }
 
+function LogLevelBadge({ level }: { level: string }) {
+    const upperLevel = level.toUpperCase()
+    let variant: 'default' | 'secondary' | 'destructive' | 'outline' = 'secondary'
+    let className = ''
+
+    switch (upperLevel) {
+        case 'ERROR':
+        case 'CRITICAL':
+            variant = 'destructive'
+            break
+        case 'WARNING':
+            className = 'bg-yellow-500 text-white hover:bg-yellow-600'
+            break
+        case 'INFO':
+            variant = 'default'
+            break
+        case 'DEBUG':
+            variant = 'outline'
+            break
+    }
+
+    return (
+        <Badge variant={variant} className={`font-mono text-xs ${className}`}>
+            {upperLevel}
+        </Badge>
+    )
+}
+
+function LogEntryRow({ log }: { log: LogEntry }) {
+    return (
+        <div className="flex items-start gap-3 py-2 px-3 hover:bg-muted/50 rounded text-sm border-b last:border-0">
+            <span className="text-muted-foreground font-mono text-xs whitespace-nowrap">
+                {log.timestamp}
+            </span>
+            <LogLevelBadge level={log.level} />
+            <span className="text-muted-foreground font-mono text-xs truncate max-w-[120px]" title={log.logger}>
+                {log.logger}
+            </span>
+            <span className="flex-1 break-words">{log.message}</span>
+        </div>
+    )
+}
+
 export default function StatusPage() {
     const router = useRouter()
     const [autoRefresh, setAutoRefresh] = useState(true)
+    const [logLevel, setLogLevel] = useState<string | undefined>(undefined)
 
     const {
         data: status,
@@ -158,6 +231,18 @@ export default function StatusPage() {
     } = useQuery({
         queryKey: ['system-status'],
         queryFn: fetchStatus,
+        refetchInterval: autoRefresh ? 10000 : false,
+        retry: 1,
+    })
+
+    const {
+        data: logsData,
+        isLoading: logsLoading,
+        error: logsError,
+        refetch: refetchLogs,
+    } = useQuery({
+        queryKey: ['system-logs', logLevel],
+        queryFn: () => fetchLogs(logLevel, 50),
         refetchInterval: autoRefresh ? 10000 : false,
         retry: 1,
     })
@@ -326,7 +411,7 @@ export default function StatusPage() {
                     </section>
 
                     {/* Quick Links */}
-                    <section>
+                    <section className="mb-8">
                         <h2 className="mb-4 text-xl font-semibold">Quick Links</h2>
                         <div className="flex flex-wrap gap-4">
                             <Button variant="outline" asChild>
@@ -348,6 +433,91 @@ export default function StatusPage() {
                     </section>
                 </>
             )}
+
+            {/* Logs Section - Always visible */}
+            <section className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Application Logs
+                    </h2>
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <select
+                                className="text-sm border rounded px-2 py-1 bg-background"
+                                value={logLevel || ''}
+                                onChange={(e) => setLogLevel(e.target.value || undefined)}
+                            >
+                                <option value="">All levels</option>
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="CRITICAL">CRITICAL</option>
+                            </select>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => refetchLogs()}
+                        >
+                            <RefreshCw className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
+                </div>
+
+                <Card>
+                    <CardContent className="p-0">
+                        {logsError && (
+                            <div className="p-4 text-red-500 flex items-center gap-2">
+                                <XCircle className="h-5 w-5" />
+                                <span>Failed to fetch logs</span>
+                            </div>
+                        )}
+
+                        {logsLoading && !logsData && (
+                            <div className="flex items-center justify-center py-8">
+                                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        )}
+
+                        {logsData && (
+                            <>
+                                {!logsData.log_file_exists && (
+                                    <div className="p-4 text-muted-foreground text-sm">
+                                        <AlertCircle className="h-4 w-4 inline mr-2" />
+                                        Log file not found at: {logsData.log_file}
+                                        <br />
+                                        <span className="text-xs">Logs will appear here once the application starts logging.</span>
+                                    </div>
+                                )}
+
+                                {logsData.log_file_exists && logsData.logs.length === 0 && (
+                                    <div className="p-4 text-muted-foreground text-sm">
+                                        No logs found{logLevel ? ` at ${logLevel} level or above` : ''}.
+                                    </div>
+                                )}
+
+                                {logsData.logs.length > 0 && (
+                                    <div className="max-h-96 overflow-y-auto">
+                                        {logsData.logs.map((log, index) => (
+                                            <LogEntryRow key={`${log.timestamp}-${index}`} log={log} />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {logsData.log_file_exists && (
+                                    <div className="p-3 border-t text-xs text-muted-foreground">
+                                        Showing {logsData.logs.length} of {logsData.total_lines} total log lines
+                                        {' • '}Log file: {logsData.log_file}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+            </section>
         </div>
     )
 }

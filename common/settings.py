@@ -265,6 +265,20 @@ class Settings(BaseSettings):
         description="The folder where the data directory is mounted for the local storage service.",
     )
 
+    # Logging settings
+    LOG_FILE_PATH: str = Field(
+        default=".data/logs/app.log",
+        description="Path to the log file for persistent logging",
+    )
+    LOG_FILE_MAX_BYTES: int = Field(
+        default=5 * 1024 * 1024,  # 5MB
+        description="Maximum size of each log file in bytes before rotation",
+    )
+    LOG_FILE_BACKUP_COUNT: int = Field(
+        default=5,
+        description="Number of backup log files to keep",
+    )
+
     # use a dotenv file for local development
     if dotenv_detected:
         model_config = SettingsConfigDict(env_file=DOT_ENV_PATH, extra="ignore")
