@@ -106,8 +106,11 @@ class WhisperLocalAdapter(TranscriptionAdapter):
             "compute_type": compute_type,
         }
         if device == "cpu":
-            model_kwargs["cpu_threads"] = settings.WHISPER_CPU_THREADS
-            model_kwargs["num_workers"] = settings.WHISPER_NUM_WORKERS
+            # Only pass thread parameters if they're explicitly set
+            if settings.WHISPER_CPU_THREADS is not None:
+                model_kwargs["cpu_threads"] = settings.WHISPER_CPU_THREADS
+            if settings.WHISPER_NUM_WORKERS is not None:
+                model_kwargs["num_workers"] = settings.WHISPER_NUM_WORKERS
 
         model = WhisperModel(
             model_size,

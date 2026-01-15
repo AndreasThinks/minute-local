@@ -36,4 +36,4 @@ COPY worker worker
 
 RUN chmod +x worker/entrypoint.sh
 
-CMD [ "worker/entrypoint.sh" ]
+CMD [ "/bin/bash", "worker/entrypoint.sh" ]
