@@ -53,10 +53,10 @@ function Write-ColorOutput {
 
 function Write-Header {
     Write-Host ""
-    Write-ColorOutput "╔══════════════════════════════════════════════════════════════╗" -Color Cyan
-    Write-ColorOutput "║              🎙️  Minute Local Setup                          ║" -Color Cyan
-    Write-ColorOutput "║         AI-Powered Meeting Transcription & Minutes           ║" -Color Cyan
-    Write-ColorOutput "╚══════════════════════════════════════════════════════════════╝" -Color Cyan
+    Write-ColorOutput "================================================================" -Color Cyan
+    Write-ColorOutput "              Minute Local Setup                                " -Color Cyan
+    Write-ColorOutput "         AI-Powered Meeting Transcription & Minutes             " -Color Cyan
+    Write-ColorOutput "================================================================" -Color Cyan
     Write-Host ""
 }
 
@@ -72,25 +72,25 @@ function Write-Step {
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "      ✓ " -NoNewline -ForegroundColor Green
+    Write-Host "      [OK] " -NoNewline -ForegroundColor Green
     Write-Host $Message
 }
 
 function Write-Warning {
     param([string]$Message)
-    Write-Host "      ⚠ " -NoNewline -ForegroundColor Yellow
+    Write-Host "      [!]  " -NoNewline -ForegroundColor Yellow
     Write-Host $Message
 }
 
 function Write-Error {
     param([string]$Message)
-    Write-Host "      ✗ " -NoNewline -ForegroundColor Red
+    Write-Host "      [X]  " -NoNewline -ForegroundColor Red
     Write-Host $Message
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "      • " -NoNewline -ForegroundColor Cyan
+    Write-Host "      [*]  " -NoNewline -ForegroundColor Cyan
     Write-Host $Message
 }
 
@@ -392,12 +392,12 @@ function Select-Configuration {
     
     Write-Host ""
     Write-ColorOutput "      [S] Small - Faster startup, works on any machine" -Color Cyan
-    Write-Host "          • LLM: llama3.2 (~2GB)"
-    Write-Host "          • Whisper: medium (~1.5GB)"
+    Write-Host "          * LLM: llama3.2 (~2GB)"
+    Write-Host "          * Whisper: medium (~1.5GB)"
     Write-Host ""
     Write-ColorOutput "      [L] Large - Best quality, requires more resources" -Color Cyan
-    Write-Host "          • LLM: qwen2.5:32b (~20GB)"
-    Write-Host "          • Whisper: large-v3 (~3GB)"
+    Write-Host "          * LLM: qwen2.5:32b (~20GB)"
+    Write-Host "          * Whisper: large-v3 (~3GB)"
     Write-Host ""
     
     $defaultKey = if ($recommended -eq "large") { "L" } else { "S" }
@@ -607,9 +607,9 @@ function Main {
     New-EnvFile
     
     Write-Host ""
-    Write-ColorOutput "╔══════════════════════════════════════════════════════════════╗" -Color Green
-    Write-ColorOutput "║                    ✨ Setup Complete!                        ║" -Color Green
-    Write-ColorOutput "╚══════════════════════════════════════════════════════════════╝" -Color Green
+    Write-ColorOutput "================================================================" -Color Green
+    Write-ColorOutput "                    Setup Complete!                             " -Color Green
+    Write-ColorOutput "================================================================" -Color Green
     Write-Host ""
     
     if ($NoStart) {
@@ -641,7 +641,7 @@ function Main {
             Write-Success "Minute is running!"
             Write-Host ""
             Write-Host "      Open in your browser:" -ForegroundColor White
-            Write-ColorOutput "      ➜  http://localhost:3000" -Color Cyan
+            Write-ColorOutput "      ->  http://localhost:3000" -Color Cyan
             Write-Host ""
             Write-Host "      Useful commands:" -ForegroundColor White
             Write-ColorOutput "      docker compose -f docker-compose.local.yaml logs -f" -Color Cyan
