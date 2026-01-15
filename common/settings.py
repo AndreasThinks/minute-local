@@ -165,6 +165,14 @@ class Settings(BaseSettings):
         description="Compute type for Whisper: 'float16' for GPU, 'int8' for CPU, 'float32' for compatibility",
         default="float16",
     )
+    WHISPER_CPU_THREADS: int | None = Field(
+        description="CPU thread count for Whisper when running on CPU",
+        default=None,
+    )
+    WHISPER_NUM_WORKERS: int | None = Field(
+        description="Worker count for Whisper when running on CPU",
+        default=None,
+    )
 
     # Speaker diarization settings (local, no external accounts required)
     ENABLE_SPEAKER_DIARIZATION: bool = Field(

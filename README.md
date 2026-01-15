@@ -159,6 +159,8 @@ Key settings in `.env.local`:
 | `BEST_LLM_MODEL_NAME` | Model for minute generation | `qwen2.5:32b` |
 | `WHISPER_MODEL_SIZE` | Whisper model size (tiny/base/small/medium/large-v3) | `large-v3` |
 | `WHISPER_DEVICE` | Device for Whisper (`cuda` or `cpu`) | `cuda` |
+| `WHISPER_CPU_THREADS` | CPU threads for Whisper when using `cpu` | `None` |
+| `WHISPER_NUM_WORKERS` | Worker threads for Whisper when using `cpu` | `None` |
 
 #### Status Dashboard
 

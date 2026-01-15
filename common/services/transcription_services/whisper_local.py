@@ -101,10 +101,17 @@ class WhisperLocalAdapter(TranscriptionAdapter):
             f"Loading Whisper model: {model_size} on {device} with {compute_type}"
         )
 
+        model_kwargs = {
+            "device": device,
+            "compute_type": compute_type,
+        }
+        if device == "cpu":
+            model_kwargs["cpu_threads"] = settings.WHISPER_CPU_THREADS
+            model_kwargs["num_workers"] = settings.WHISPER_NUM_WORKERS
+
         model = WhisperModel(
             model_size,
-            device=device,
-            compute_type=compute_type,
+            **model_kwargs,
         )
 
         # Transcribe the audio
